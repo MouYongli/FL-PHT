@@ -11,22 +11,21 @@ To test, you can put the example data under the path "./example_data/MICCAI_FeTS
     ├── losses.py
     ├── ...
 ├── example_data
-    └── /example_data
-        └── MICCAI_FeTS2022_TrainingData
-            ├── partitioning_1.csv
-            ├── FeTS2022_00000
-                ├── FeTS2022_00000_t1.nii.gz
-                ├── FeTS2022_00000_t1ce.nii.gz
-                ├── FeTS2022_00000_t2.nii.gz
-                ├── FeTS2022_00000_flair.nii.gz
-                ├── FeTS2022_00000_seg.nii.gz
-            ├── FeTS2022_00001
-                ├── FeTS2022_00001_t1.nii.gz
-                ├── FeTS2022_00001_t1ce.nii.gz
-                ├── FeTS2022_00001_t2.nii.gz
-                ├── FeTS2022_00001_flair.nii.gz
-                ├── FeTS2022_00001_seg.nii.gz
-            ├── ...
+    └── MICCAI_FeTS2022_TrainingData
+        ├── partitioning_1.csv
+        ├── FeTS2022_00000
+            ├── FeTS2022_00000_t1.nii.gz
+            ├── FeTS2022_00000_t1ce.nii.gz
+            ├── FeTS2022_00000_t2.nii.gz
+            ├── FeTS2022_00000_flair.nii.gz
+            ├── FeTS2022_00000_seg.nii.gz
+        ├── FeTS2022_00001
+            ├── FeTS2022_00001_t1.nii.gz
+            ├── FeTS2022_00001_t1ce.nii.gz
+            ├── FeTS2022_00001_t2.nii.gz
+            ├── FeTS2022_00001_flair.nii.gz
+            ├── FeTS2022_00001_seg.nii.gz
+        ├── ...
 ├── federated
     ├── README.md
     ├── ...
