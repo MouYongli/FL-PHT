@@ -6,6 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 from imageio import NibabelIO
 
 BASE_PATH = "/home/mou/Projects/fets/example_data/MICCAI_FeTS2022_TrainingData"
+# BASE_PATH = "../data/miccai_fets2022_trainingdata/MICCAI_FeTS2022_TrainingData"
 
 class NibabelDataset(Dataset):
     def __init__(self,
