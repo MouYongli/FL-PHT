@@ -7,6 +7,7 @@ from typing import List
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from dataset import NibabelDataset
@@ -28,7 +29,21 @@ def numpy_collate(batch):
     for k in batch.keys():
         batch[k] = batch[k].numpy()
     return batch
-
+    
+def nearest_multiple_of_32(x):
+    remainder = x % 32
+    if remainder < 16:
+        return x - remainder
+    else:
+        return x + (32 - remainder)
+    
+def nearest_multiple_of_64(x):
+    remainder = x % 64
+    if remainder < 32:
+        return x - remainder
+    else:
+        return x + (64 - remainder)
+    
 def collate_outputs(outputs: List[dict]):
     """
     used to collate default train_step and validation_step outputs. If you want something different then you gotta
@@ -50,7 +65,8 @@ def collate_outputs(outputs: List[dict]):
 
 if __name__ == '__main__':
     # Dataset and Dataloader
-    BATCH_SIZE = 2
+    BATCH_SIZE_TRAIN = 2
+    BATCH_SIZE_VAL = 1
     NUM_EPOCHS = 1
     LR = 1e-2
     WEIGHT_DECAY = 3e-5
@@ -59,8 +75,8 @@ if __name__ == '__main__':
 
     dset_train = NibabelDataset()
     dset_val = NibabelDataset()
-    dloader_train = DataLoader(dset_train, BATCH_SIZE, collate_fn=numpy_collate)
-    dloader_val = DataLoader(dset_val, BATCH_SIZE, collate_fn=numpy_collate)
+    dloader_train = DataLoader(dset_train, BATCH_SIZE_TRAIN, collate_fn=numpy_collate)
+    dloader_val = DataLoader(dset_val, BATCH_SIZE_VAL, collate_fn=numpy_collate)
 
     # Data Transforms
     transforms_train = []
@@ -89,8 +105,7 @@ if __name__ == '__main__':
     transforms_train = Compose(transforms_train)
 
     transforms_val = []
-    transforms_val.append(GaussianNoiseTransform(p_per_sample=0.1))
-    transforms_val.append(GaussianBlurTransform((0.5, 1.), different_sigma_per_channel=True, p_per_sample=0.2, p_per_channel=0.5))
+    transforms_val.append(RemoveLabelTransform(-1, 0))
     transforms_val.append(RenameTransform('seg', 'target', True))
     transforms_val.append(NumpyToTensor(['data', 'target'], 'float'))
     transforms_val = Compose(transforms_val)
@@ -134,7 +149,7 @@ if __name__ == '__main__':
             torch.nn.utils.clip_grad_norm_(model.parameters(), 12)
             optimizer.step()
             train_outputs.append({'loss': loss.detach().cpu().numpy()})
-            print()
+            print(f'{i}/{len(dloader_train)} loss:', loss.detach().cpu().numpy())
         train_collate_outputs = collate_outputs(train_outputs)
         train_loss = np.mean(train_collate_outputs['loss'])
         print('     train_losses', train_loss, epoch)
@@ -142,14 +157,20 @@ if __name__ == '__main__':
         model.eval()
         val_outputs = []
         for i, batch in enumerate(dloader_val):
-            batch = transforms_train(**batch)
+            batch = transforms_val(**batch)
             data, target = batch["data"], batch["target"]
             data = data.to(DEVICE, non_blocking=True)
             target = target.to(DEVICE, non_blocking=True)
-            output = model(data)
-            loss = loss_func(output, target)
-            output_seg = output.argmax(1)[:, None]
-            preds_onehot_test = torch.zeros(output.shape, device=DEVICE, dtype=torch.float32)
+            n, m, d, h, w = data.shape
+            # d_new, h_new, w_new = nearest_multiple_of_32(d), nearest_multiple_of_32(h), nearest_multiple_of_32(w)
+            d_new, h_new, w_new = nearest_multiple_of_64(d), nearest_multiple_of_64(h), nearest_multiple_of_64(w)
+            data_interpolated = F.interpolate(data, size=(d_new//2, h_new//2, w_new//2), mode='trilinear', align_corners=False)
+            print(data.shape, data_interpolated.shape)
+            output = model(data_interpolated)            
+            output_interpolated = F.interpolate(output, size=(d, h, w), mode='trilinear', align_corners=False)
+            loss = loss_func(output_interpolated, target)
+            output_seg = output_interpolated.argmax(1)[:, None]
+            preds_onehot_test = torch.zeros(output_interpolated.shape, device=DEVICE, dtype=torch.float32)
             preds_onehot_test.scatter_(1, output_seg, 1)
             tp, fp, fn, tn = get_tp_fp_fn_tn(preds_onehot_test, target)
             tp_hard = tp.detach().cpu().numpy()

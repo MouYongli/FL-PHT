@@ -1,8 +1,5 @@
 
-# Isolated Learning
-
-
-## Visualization
+# Visualization
 
 To use the python package "visualizer" to show the brain and tumor segmentations
 
