@@ -5,16 +5,17 @@ from torch.utils.data import Dataset, DataLoader
 
 from imageio import NibabelIO
 
-BASE_PATH = "/home/mou/Projects/fets/example_data/MICCAI_FeTS2022_TrainingData"
+BASE_PATH = "/home/haneef/FL-PHT/FL-PHT/example_data"
 # BASE_PATH = "../data/miccai_fets2022_trainingdata/MICCAI_FeTS2022_TrainingData"
 
 class NibabelDataset(Dataset):
     def __init__(self,
                  base_path: str = BASE_PATH,
-                 split: str = "train"):
+                 split: str = "train",
+                 partitioning: str = "partitioning_1.csv"):
         self.base_path = base_path
         self.split = split
-        self.data_df = pd.read_csv(osp.join(base_path, "partitioning_1.csv"))
+        self.data_df = pd.read_csv(osp.join(base_path, partitioning))
 
     def __len__(self):
         return len(self.data_df)

@@ -24,6 +24,8 @@ from batchgenerators.transforms.resample_transforms import SimulateLowResolution
 from batchgenerators.transforms.color_transforms import BrightnessMultiplicativeTransform, ContrastAugmentationTransform, GammaTransform
 from batchgenerators.transforms.utility_transforms import RemoveLabelTransform, RenameTransform, NumpyToTensor
 
+import mlflow
+
 def numpy_collate(batch):
     batch = torch.utils.data._utils.collate.default_collate(batch)
     for k in batch.keys():
@@ -65,16 +67,30 @@ def collate_outputs(outputs: List[dict]):
 
 if __name__ == '__main__':
     # Dataset and Dataloader
-    BATCH_SIZE_TRAIN = 2
+    BATCH_SIZE_TRAIN = 1
     BATCH_SIZE_VAL = 1
-    NUM_EPOCHS = 1
+    NUM_EPOCHS = 50
     LR = 1e-2
     WEIGHT_DECAY = 3e-5
     PATCH_SIZE = [128, 128, 128]
-    DEVICE = torch.device(type='cuda', index=0) if torch.cuda.is_available() else torch.device(type='cpu')
 
-    dset_train = NibabelDataset()
-    dset_val = NibabelDataset()
+    mlflow.set_tracking_uri('https://mlflow.klee.informatik.rwth-aachen.de')
+    mlflow.set_experiment('FL-PHT')
+    mlflow.start_run()
+    mlflow.log_param('BATCH_SIZE_TRAIN', BATCH_SIZE_TRAIN)
+    mlflow.log_param('BATCH_SIZE_VAL', BATCH_SIZE_VAL)
+    mlflow.log_param('NUM_EPOCHS', NUM_EPOCHS)
+    mlflow.log_param('LR', LR)
+    mlflow.log_param('WEIGHT_DECAY', WEIGHT_DECAY)
+    mlflow.log_param('PATCH_SIZE', PATCH_SIZE)
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    DEVICE = torch.device(type='cuda', index=0) if torch.cuda.is_available() else torch.device(type='cpu')
+    mlflow.log_param('DEVICE', DEVICE.type)
+
+    dset_train = NibabelDataset(base_path='/home/haneef/FeTS-2022-Challenge/TrainingData/MICCAI_FeTS2022_TrainingData', partitioning='FL_PHT_partitioning_train.csv')
+    dset_val = NibabelDataset(base_path='/home/haneef/FeTS-2022-Challenge/TrainingData/MICCAI_FeTS2022_TrainingData', partitioning='FL_PHT_partitioning_val.csv')
     dloader_train = DataLoader(dset_train, BATCH_SIZE_TRAIN, collate_fn=numpy_collate)
     dloader_val = DataLoader(dset_val, BATCH_SIZE_VAL, collate_fn=numpy_collate)
 
@@ -153,6 +169,7 @@ if __name__ == '__main__':
         train_collate_outputs = collate_outputs(train_outputs)
         train_loss = np.mean(train_collate_outputs['loss'])
         print('     train_losses', train_loss, epoch)
+        mlflow.log_metric('train_loss', train_loss, epoch)
         # Val Epoch
         model.eval()
         val_outputs = []
@@ -165,7 +182,7 @@ if __name__ == '__main__':
             # d_new, h_new, w_new = nearest_multiple_of_32(d), nearest_multiple_of_32(h), nearest_multiple_of_32(w)
             d_new, h_new, w_new = nearest_multiple_of_64(d), nearest_multiple_of_64(h), nearest_multiple_of_64(w)
             data_interpolated = F.interpolate(data, size=(d_new//2, h_new//2, w_new//2), mode='trilinear', align_corners=False)
-            print(data.shape, data_interpolated.shape)
+            # print(data.shape, data_interpolated.shape)
             output = model(data_interpolated)            
             output_interpolated = F.interpolate(output, size=(d, h, w), mode='trilinear', align_corners=False)
             loss = loss_func(output_interpolated, target)
@@ -187,3 +204,7 @@ if __name__ == '__main__':
         print('     val_losses', val_loss, epoch)
         print('     val mean_fg_dice', mean_fg_dice, epoch)
         print('     val dice_per_class_or_region', global_dc_per_class, epoch)
+        mlflow.log_metric('val_loss', val_loss, epoch)
+        mlflow.log_metric('val_mean_fg_dice', mean_fg_dice, epoch)
+
+    mlflow.end_run()    
