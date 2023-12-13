@@ -1,2 +1,5 @@
 example_data/
 **/__pycache__/**
+**/checkpoints/**
+**/nohop.out
+federated/learning/nohup.out
