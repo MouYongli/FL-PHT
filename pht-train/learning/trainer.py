@@ -76,7 +76,11 @@ class Trainer():
             weight_decay: float = 1e-2,
             patch_size = [128, 128, 128],
             device: torch.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu"),
-            client_id: int = 0
+            client_id: int = 0,
+            training_set_path: str = '/home/data/MICCAI_FeTS2022_TrainingData',
+            validation_set_path: str = '/home/data/MICCAI_FeTS2022_ValidationData',
+            training_set_partition_file: str = 'partitioning_1.csv',
+            validation_set_partition_file: str = 'partitioning_1.csv'
     ):
         self.training_batch_size = training_batch_size
         self.validation_batch_size = validation_batch_size
@@ -88,8 +92,8 @@ class Trainer():
         self.client_id = client_id
 
         # Data Loaders
-        dset_train = NibabelDataset(base_path='/home/haneef/FeTS-2022-Challenge/TrainingData/MICCAI_FeTS2022_TrainingData', partition_id=client_id)
-        dset_val = NibabelDataset(base_path='/home/haneef/FeTS-2022-Challenge/TrainingData/MICCAI_FeTS2022_TrainingData', partition_id=client_id)
+        dset_train = NibabelDataset(base_path=training_set_path, partition_id=client_id, partitioning=training_set_partition_file)
+        dset_val = NibabelDataset(base_path=validation_set_path, partition_id=client_id, partitioning=validation_set_partition_file)
         self.dloader_train = DataLoader(dset_train, self.training_batch_size, collate_fn=numpy_collate)
         self.dloader_val = DataLoader(dset_val, self.validation_batch_size, collate_fn=numpy_collate)
 
@@ -144,8 +148,8 @@ class Trainer():
         self.lr_scheduler = PolyLRScheduler(self.optimizer, self.learning_rate, self.epochs)
 
     def run_training(self):
-        print(f"Training starts for client {self.client_id}")
-        path = str(os.environ.get('FEDERATED_MODEL_PATH', f'/home/haneef/FL-PHT/FL-PHT/federated/learning/checkpoints'))
+        print(f"Training starts for client {self.client_id} on device {self.device}...")
+        path = str(os.environ.get('FEDERATED_MODEL_PATH'))
         modelName = 'model.pth'
         fedmodelpath = path + '/' + modelName
 
@@ -156,7 +160,7 @@ class Trainer():
 
         train_losses = []
         for epoch in range(self.epochs):
-            print(f"Epoch {epoch} starts...")
+            print(f"Epoch {epoch}/{self.epochs} starts...")
             # Training Epoch
             self.model.train()
             self.lr_scheduler.step(epoch)
@@ -177,11 +181,9 @@ class Trainer():
             train_collate_outputs = collate_outputs(train_outputs)
             train_loss = np.mean(train_collate_outputs['loss'])
             print('     train_losses', train_loss, epoch)
-            mlflow.log_metric(f'train_loss_{self.client_id}', train_loss, epoch)
             train_losses.append(train_loss)
             
-        
-        # Val Epoch
+        # Do validation at the end of training round
         self.model.eval()
         val_outputs = []
         for i, batch in enumerate(self.dloader_val):
@@ -215,11 +217,7 @@ class Trainer():
         print('     val_losses', val_loss, epoch)
         print('     val mean_fg_dice', mean_fg_dice, epoch)
         print('     val dice_per_class_or_region', global_dc_per_class, epoch)
-        mlflow.log_metric(f'val_loss_{self.client_id}', val_loss, epoch)
-        mlflow.log_metric(f'val_mean_fg_dice_{self.client_id}', mean_fg_dice, epoch)
-
-        # Convert numpy.float32 to float
-        # val_dice_per_class_or_region = [str(x) for x in global_dc_per_class]
+        
         # Flatten the list and convert numpy.float32 to float
         val_dice_per_class_or_region = [float(x) for sublist in global_dc_per_class for x in sublist]
         train_losses = [float(x) for x in train_losses]
@@ -237,22 +235,5 @@ class Trainer():
         # Save losses to file
         with open(loss_path, 'w') as f:
             json.dump(loss_file_contents, f)
-        
         # Save model
-        client_model_path = path + '/' + str(self.client_id)
-        if not os.path.exists(client_model_path):
-            os.makedirs(client_model_path)
-        torch.save(self.model.state_dict(), client_model_path + '/' + modelName)
-
-        with open(loss_path, 'r') as f:
-            losses = json.load(f)
-        client_id = losses['client_id']
-
-        for epoch, loss in enumerate(losses['train_losses']):
-            mlflow.log_metric(f'epoch_loss_{client_id}', loss, epoch)
-        
-        mlflow.log_metric(f'train_loss_{client_id}', np.mean(losses['train_losses']))
-        mlflow.log_metric(f'val_loss_{client_id}', losses['val_loss'])
-        mlflow.log_metric(f'val_mean_fg_dice_{client_id}', losses['val_mean_fg_dice'])
-        for i in range(len(losses['val_dice_per_class_or_region'])):
-            mlflow.log_metric(f'val_dice_per_class_or_region_{i}_{client_id}', losses['val_dice_per_class_or_region'][i])
+        torch.save(self.model.state_dict(), fedmodelpath)
